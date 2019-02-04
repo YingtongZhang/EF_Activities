@@ -1,0 +1,118 @@
+---
+title: 'Assginment_01'
+author: 'Yingtong Zhang'
+date: "Jan 31, 2019"
+output: html_document
+---
+
+
+## Questions:
+
+```
+1.	Evaluate the following:
+   a.	ln(1)
+   b.	ln(0)
+   c.	ln(e)
+   d.	ln(-5)
+   e.	-ln(5)
+   f.	ln(1/5)
+   g.	How does R represent when the output of a function is not a number?
+```
+
+```{r, echo=TRUE}
+   log(1)
+   log(0)
+   log(exp(1))
+   log(-5)
+   -log(5)
+   log(1/5)
+```
+```
+g. It could be -Inf, Inf, or NaN.
+```
+```
+2. Why are we multiplying the results of the atan and atan2 functions by 180/pi? 
+Because the results of the atan and atan2 are radians instead of angles.
+
+3.	How is the atan2 function different from the atan function? 
+The arc-tangent of two arguments atan2(y, x) returns the angle between the x-axis and the vector from the origin to (x, y), but atan(x) directly return the arc-tangent number.
+
+4.	What is the difference between log and log10?
+log computes natural logarithms, log10 computes common logarithms.
+
+5. Given a right triangle with sides x = 5 and y = 13, calculate the length of the hypotenuse (show code)
+```
+```{r, echo=TRUE}
+   x = 5
+   y = 13
+   sqrt(x^2 + y^2)
+```
+
+```
+6.	If a population starts with a density of 5 individuals/hectare and grows exponentially at a growth rate r=0.04/year, what is the size of the population in π years? (show code)
+```
+```{r, echo=TRUE}
+   x = 5         # initial population density 
+   r = 0.04      # growth rate
+   y = x + x * exp(r * pi)
+   y
+```
+
+```
+7. Subtract the month you were born from the remainder left after you divide the year you were born by the day you were born (show code)
+```
+```{r, echo=TRUE}
+   year = 1992
+   month = 6
+   day = 24
+   y = month - year %% day
+   y
+```
+
+
+```
+8.	Describe the difference in output between sum and cumsum.
+The function sum returns value been summed up of all of the numbers input, but cumsum returns the vetor for the sum of every two numbers.
+```
+
+```
+9.	Generate a sequence of even numbers from -6 to 6
+```
+```{r, echo=TRUE}
+seq(-6, 6, by = 2)
+```
+
+```
+10.	Generate a sequence of values from -4.8 to -3.43 that is length 8 (show code)
+a.	What is the difference between values in this sequence?
+b.	What is the sum of the exponential of this sequence?
+```
+
+```{r, echo=TRUE}
+x <- seq(-4.8, 3.43, length = 8)
+x
+dif <- x[2] - x[1]
+dif
+```
+
+```
+11.	Calculate a second difference [a difference of differences] for the sequence 1:10 (show code)
+```
+```{r, echo=TRUE}
+x <- diff(1:10)
+diff(x)
+```
+
+```
+12.	Save the frog data file delimited in a pipe-delimited format (i.e. separated by ‘|’). Open the file up in a text editor and cut-and-paste the first few lines of the file into your Rscript file (just so I can see what you did).  Load the data back up into R as ‘dat2’ (show code)
+```
+
+```{r, echo=TRUE}
+
+```
+
+
+
+
+
+

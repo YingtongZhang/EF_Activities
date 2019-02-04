@@ -8,7 +8,12 @@ Simulating the discrete-time logistic
 
 Define parameters
 ```{r}
-devtools::install_github("EcoForecast/ecoforecastR")
+ciEnvelope <- function(x,ylo,yhi,col="lightgrey",...){
+	  polygon(cbind(c(x, rev(x), x[1]), c(ylo, rev(yhi),
+	  ylo[1])), border = NA,col=col,...)
+}
+
+#devtools::install_github("EcoForecast/ecoforecastR")
 r = 1         ## intrinsic growth rate
 K = 10        ## carrying capacity      
 n0 = .1       ## initial population size
@@ -19,6 +24,7 @@ time = 1:NT
 Iterative simulation
 ```{r}
 n = rep(n0,NT)    ## vector to store results
+n
 for(t in 2:NT){
   n[t] = n[t-1] + r*n[t-1]*(1-n[t-1]/K)
 }

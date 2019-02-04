@@ -150,7 +150,7 @@ Packages are installed using the ‘Install Packages’ button under the “Pack
    d.	ln(-5)
    e.	-ln(5)
    f.	ln(1/5)
-g.	How does R represent when the output of a function is not a number?
+   g.	How does R represent when the output of a function is not a number?
 2.	Why are we multiplying the results of the atan and atan2 functions by 180/pi? 
 3.	How is the atan2 function different from the atan function? 
 4.	What is the difference between log and log10?
