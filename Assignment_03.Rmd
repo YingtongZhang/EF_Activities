@@ -1,0 +1,48 @@
+---
+title: "Assignment_3"
+author: 'Yingtong Zhang'
+date: "Jan 31, 2019"
+output: html_document
+---
+
+The objective of today's exercise is to provide a quick introduction to some common tools for dealing with big data. For each tool we are just using the most basic syntax and you are encouraged to go back and read the help for each at a later date. This exercise also focuses on "general purpose" tools. There are a multitude of R libraries available for accessing specific data sources and web services. A quick summary of some of these is available at http://cran.r-project.org/web/views/WebTechnologies.html. In addition, a Google search on many of the tools and topics covered in Chapters 3 and 4 will provide a lot of additional info on big data tools outside of R.
+
+Note: The code in this exercise will download data off the web dynamically, which can take some time, so try to "knit" infrequently.
+
+```{r,echo=FALSE}
+## since libraries will be pulled, make sure repository is set
+repos = "http://cran.us.r-project.org"
+get.pkg <- function(pkg){
+  loaded <- do.call("require",list(package=pkg))
+  if(!loaded){
+    print(paste("trying to install",pkg))
+    install.packages(pkg,dependencies=TRUE,repos=repos)
+    loaded <- do.call("require",list(package=pkg))
+    if(loaded){
+      print(paste(pkg,"installed and loaded"))
+    } 
+    else {
+      stop(paste("could not install",pkg))
+    }    
+  }
+}
+get.pkg("RCurl")
+get.pkg("XML")
+get.pkg("ncdf4")
+get.pkg("devtools")
+library("MODISTools")
+```
+
+Note: The MODISTools library is no longer on CRAN, but can be downloaded manually from the ORNL DAAC here: https://modis.ornl.gov/data/modis_webservice.html
+
+Pulling data directly off the web
+---------------------------------
+
+In the previous exercises we loaded data into R using functions like read.csv. However, it is also possible to read data into R directly off the web by passing a web address to the file name. For smaller files that are quick to load this approach can ensure that the script is always operating with the most up-to-date version of a data file. 
+
+```{r}
+gflu = read.csv("http://www.google.org/flutrends/about/data/flu/us/data.txt",skip=11)
+time = as.Date(gflu$Date)
+plot(time,gflu$Boston..MA,type='l')
+```
+
