@@ -46,3 +46,53 @@ time = as.Date(gflu$Date)
 plot(time,gflu$Boston..MA,type='l')
 ```
 
+That said, for publication purposes it is usually important to save the data that you used for an analysis, and that the date of access is recorded (and version number if available), as some datasets are subject to frequent revision.
+
+In this example, the file in question has an extensive header, which we skip during the load of the data, but as with any dataset, this metadata is important to read before using the data.
+
+```
+Google Flu Trends - United States
+Copyright 2013 Google Inc.
+
+Exported data may be used for any purpose, subject to the Google Terms of Service (http://www.google.com/accounts/TOS?hl=en_US).
+If you choose to use the data, please attribute it to Google as follows: "Data Source: Google Flu Trends (http://www.google.org/flutrends)".
+
+Each week begins on the Sunday (Pacific Time) indicated for the row.
+Data for the current week will be updated each day until Saturday (Pacific Time).
+Note: To open these files in a spreadsheet application, we recommend you save each text file as a CSV spreadsheet.
+For more information, please visit http://www.google.org/flutrends
+```
+
+**Question 1:**
+
+Using the US Forest Service's Forest Inventory and Analysis (FIA) data set, plot the rank vs log(abundance) curve for tree seedling counts from Rhode Island. Data is available at https://apps.fs.usda.gov/fia/datamart/CSV/RI_SEEDLING.csv and the relevant columns are TREECOUNT (raw seedling counts) and SPCD (species codes). 
+Hints: tapply, sum, na.rm=TRUE, sort, decreasing=TRUE, log='y'
+
+```{r}
+data_FIA = read.csv("https://apps.fs.usda.gov/fia/datamart/CSV/RI_SEEDLING.csv")
+count_by_code <- sort(tapply(data_FIA$TREECOUNT, data_FIA$SPCD, sum, na.rm = TRUE), decreasing = TRUE)
+
+
+plot(1:length(count_by_code), log(count_by_code), type='l', xlab = 'Abundance Rank', ylab = 'Abundance(log)')
+```
+
+
+
+Web Scraping
+------------
+
+Often the data that we want to use from the web has been formatted in HTML for human-readability rather than in tab- or comma-delimited files for inport and export. The process of extracting data from webpages has been dubbed **scraping**. For these sorts of more complex problems we can use the RCurl library to grab HTML or XML structured content directly off the web, and then use the XML library to parse the markup into more standard R data objects. In the example below we grab data on the status of all the files that make up the FIA in order to look for files that have been updated after a certain date.
+
+```{r}
+nu <- function(x){as.numeric(as.character(x))}  ## simple function to convert data to numeric
+
+fia_html <- getURL("https://apps.fs.usda.gov/fia/datamart/CSV/datamart_csv.html")  ## grab raw html
+fia_table = readHTMLTable(fia_html)[[3]]    ## We're interested in the 3rd table on this webpage
+update = as.Date(fia_table[,"Last Modified Date"])
+hist(update,"months")                       ## Plot a histogram of update times
+recent <- fia_table[which(update > "2016/01/01"),]
+```
+
+
+
+
