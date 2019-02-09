@@ -51,21 +51,6 @@ plot(1:length(count_by_code), log(count_by_code), type='l', xlab = 'Abundance Ra
 
 
 
-Web Scraping
-------------
-
-Often the data that we want to use from the web has been formatted in HTML for human-readability rather than in tab- or comma-delimited files for inport and export. The process of extracting data from webpages has been dubbed **scraping**. For these sorts of more complex problems we can use the RCurl library to grab HTML or XML structured content directly off the web, and then use the XML library to parse the markup into more standard R data objects. In the example below we grab data on the status of all the files that make up the FIA in order to look for files that have been updated after a certain date.
-
-```{r}
-nu <- function(x){as.numeric(as.character(x))}  ## simple function to convert data to numeric
-
-fia_html <- getURL("https://apps.fs.usda.gov/fia/datamart/CSV/datamart_csv.html")  ## grab raw html
-fia_table = readHTMLTable(fia_html)[[3]]    ## We're interested in the 3rd table on this webpage
-update = as.Date(fia_table[,"Last Modified Date"])
-hist(update,"months")                       ## Plot a histogram of update times
-recent <- fia_table[which(update > "2016/01/01"),]
-```
-
 **Question 2:**
 Create a sorted table of how many FLUXNET eddy-covariance towers are in each country according to the website at http://fluxnet.fluxdata.org/sites/site-list-and-pages/. 
 Hint: use substring to extract the country code from the overall FLUXNET ID code.
@@ -73,15 +58,79 @@ Hint: use substring to extract the country code from the overall FLUXNET ID code
 ```{r}
 nu <- function(x){as.numeric(as.character(x))}  ## simple function to convert data to numeric
 
-fluxnet_table = readHTMLTable("FLUXNET2015Sites.html")[[1]]   ## We're interested in the 3rd table on this webpage
-#update = as.Date(fia_table[,"Last Modified Date"])
-#hist(update,"months")                       ## Plot a histogram of update times
-#recent <- fia_table[which(update > "2016/01/01"),]
+# as the getURL function doesn't work to get the table, I save the page to html to read as a table
+fluxnet_table = readHTMLTable("FLUXNET2015Sites.html")[[1]]
+country_ID <- table(substr(fluxnet_table$SITE_ID, 1, 2))
+towers_num <- as.data.frame(sort(country_ID))
+colnames(towers_num) <- c('Country', 'count')
+towers_num
+
 ```
 
 
 
+**Question 3:** Within the object myCode, find all the lines that begin with the comment character, #.
+```{r}
+myCode = readLines("Exercise_03_BigData.Rmd")  ## read unstructured text
+x = grep("^#", myCode)    ## returns the line numbers that include the string 'RI'
+myCode[x]
 
+```
+
+
+netCDF, wget
+------------
+
+In this section I want to introduce another command-line utility, wget, which can be used to pull files and content off the web, and to demonstrate how netCDF can be used in R. For this example we will be using data from the WLEF eddy-covariance tower located in northern Wisconsin. Unlike most flux towers, WLEF is a "tall-tower" -- it's actually a 440m TV antenna -- which means that it integrates over a much larger footprint than most towers. Indeed, the tower is instrumented at multiple heights. First, let's use wget to grab the data off the web. A few notes: 1) wget could be used from command line rather than as a system command;  2) if you don't have wget installed, use your web browser
+
+```{r}
+system("wget http://flux.aos.wisc.edu/data/cheas/wlef/netcdf/US-PFa-WLEF-TallTowerClean-2012-L0-vFeb2013.nc")
+```
+
+Next, lets open the file and look at what it contains
+```{r}
+## open the netCDF file
+wlef = nc_open("US-PFa-WLEF-TallTowerClean-2012-L0-vFeb2013.nc")
+print(wlef)    ## metadata
+```
+
+To start, lets look at the CO2 flux data, NEE_co2, which we see is stored in a matrix that has dimensions of [level2,time], where here level2 refers to the different measurements heights. If we want to grab this data and the vectors describing the dimensions we can do this as:
+
+```{r}
+NEE = ncvar_get(wlef,"NEE_co2")    ## NEE data
+
+## matrix dimensions
+height = ncvar_get(wlef,"M_lvl")  
+doy = ncvar_get(wlef,"time")  # day of year
+
+## close file connection
+nc_close(wlef)
+```
+
+Finally, we can plot the data at the different heights. Since this flux data is recorded hourly the raw data is a bit of a cloud, therefore we use the function `filter` to impose a 24 hour moving window, which is indicated in the function as a vector of 24 weights, each given an equal weight of 1/24. 
+
+```{r}
+## print fluxes at 3 different heights
+for(i in 1:3){
+plot(doy,filter(NEE[i,],rep(1/24,24)),type='l',main=paste("Height =",height[i],"m"))
+}
+```
+
+Alternative, if I just wanted to get a subset of air temperature data (e.g. 24 hours of data from the top height for the 220th day of the year)
+
+```{r}
+start = which(doy > 220)[1]
+wlef = nc_open("US-PFa-WLEF-TallTowerClean-2012-L0-vFeb2013.nc")
+TA = ncvar_get(wlef,"TA",c(3,start),c(1,24))
+plot(TA,type = 'l')
+nc_close(wlef)
+```
+
+
+
+**Question 4:** 
+
+Similar to how we can point read.csv to the URL of a text file, you can open and manipulate netCDF files on remote servers if those servers support THREDDS/OpenDAP. Furthermore, these utilities let you grab just the part of the file that you need rather than the file in it's entirety. Using this approach, download and plot the air temperature data for Boston for 2004 that's located on the ORNL DAAC server `http://thredds.daac.ornl.gov/thredds/dodsC/ornldaac/1220/mstmip_driver_global_hd_climate_tair_2004_v1.nc4`.  The underlying file is quite large so make sure to grab just the subset you need. To do so you'll need to first grab the lat, lon, and time variables to find _which_ grid cell to grab for lat and lon and how many values to grab from time (i.e. _length_). 
 
 
 
