@@ -52,13 +52,14 @@ plot(1:length(count_by_code), log(count_by_code), type='l', xlab = 'Abundance Ra
 
 
 **Question 2:**
+
 Create a sorted table of how many FLUXNET eddy-covariance towers are in each country according to the website at http://fluxnet.fluxdata.org/sites/site-list-and-pages/. 
 Hint: use substring to extract the country code from the overall FLUXNET ID code.
 
 ```{r}
 nu <- function(x){as.numeric(as.character(x))}  ## simple function to convert data to numeric
 
-# as the getURL function doesn't work to get the table, I save the page to html to read as a table
+# as the getURL function doesn't work to get the table because of the format change of the webpage, I save the page to html to read as a table. 
 fluxnet_table = readHTMLTable("FLUXNET2015Sites.html")[[1]]
 country_ID <- table(substr(fluxnet_table$SITE_ID, 1, 2))
 towers_num <- as.data.frame(sort(country_ID))
@@ -69,7 +70,9 @@ towers_num
 
 
 
-**Question 3:** Within the object myCode, find all the lines that begin with the comment character, #.
+**Question 3:** 
+
+Within the object myCode, find all the lines that begin with the comment character, #.
 ```{r}
 myCode = readLines("Exercise_03_BigData.Rmd")  ## read unstructured text
 x = grep("^#", myCode)    ## returns the line numbers that include the string 'RI'
@@ -78,63 +81,64 @@ myCode[x]
 ```
 
 
-netCDF, wget
-------------
-
-In this section I want to introduce another command-line utility, wget, which can be used to pull files and content off the web, and to demonstrate how netCDF can be used in R. For this example we will be using data from the WLEF eddy-covariance tower located in northern Wisconsin. Unlike most flux towers, WLEF is a "tall-tower" -- it's actually a 440m TV antenna -- which means that it integrates over a much larger footprint than most towers. Indeed, the tower is instrumented at multiple heights. First, let's use wget to grab the data off the web. A few notes: 1) wget could be used from command line rather than as a system command;  2) if you don't have wget installed, use your web browser
-
-```{r}
-system("wget http://flux.aos.wisc.edu/data/cheas/wlef/netcdf/US-PFa-WLEF-TallTowerClean-2012-L0-vFeb2013.nc")
-```
-
-Next, lets open the file and look at what it contains
-```{r}
-## open the netCDF file
-wlef = nc_open("US-PFa-WLEF-TallTowerClean-2012-L0-vFeb2013.nc")
-print(wlef)    ## metadata
-```
-
-To start, lets look at the CO2 flux data, NEE_co2, which we see is stored in a matrix that has dimensions of [level2,time], where here level2 refers to the different measurements heights. If we want to grab this data and the vectors describing the dimensions we can do this as:
-
-```{r}
-NEE = ncvar_get(wlef,"NEE_co2")    ## NEE data
-
-## matrix dimensions
-height = ncvar_get(wlef,"M_lvl")  
-doy = ncvar_get(wlef,"time")  # day of year
-
-## close file connection
-nc_close(wlef)
-```
-
-Finally, we can plot the data at the different heights. Since this flux data is recorded hourly the raw data is a bit of a cloud, therefore we use the function `filter` to impose a 24 hour moving window, which is indicated in the function as a vector of 24 weights, each given an equal weight of 1/24. 
-
-```{r}
-## print fluxes at 3 different heights
-for(i in 1:3){
-plot(doy,filter(NEE[i,],rep(1/24,24)),type='l',main=paste("Height =",height[i],"m"))
-}
-```
-
-Alternative, if I just wanted to get a subset of air temperature data (e.g. 24 hours of data from the top height for the 220th day of the year)
-
-```{r}
-start = which(doy > 220)[1]
-wlef = nc_open("US-PFa-WLEF-TallTowerClean-2012-L0-vFeb2013.nc")
-TA = ncvar_get(wlef,"TA",c(3,start),c(1,24))
-plot(TA,type = 'l')
-nc_close(wlef)
-```
-
-
-
 **Question 4:** 
 
 Similar to how we can point read.csv to the URL of a text file, you can open and manipulate netCDF files on remote servers if those servers support THREDDS/OpenDAP. Furthermore, these utilities let you grab just the part of the file that you need rather than the file in it's entirety. Using this approach, download and plot the air temperature data for Boston for 2004 that's located on the ORNL DAAC server `http://thredds.daac.ornl.gov/thredds/dodsC/ornldaac/1220/mstmip_driver_global_hd_climate_tair_2004_v1.nc4`.  The underlying file is quite large so make sure to grab just the subset you need. To do so you'll need to first grab the lat, lon, and time variables to find _which_ grid cell to grab for lat and lon and how many values to grab from time (i.e. _length_). 
 
 
+```{r}
+ORNL = nc_open("http://thredds.daac.ornl.gov/thredds/dodsC/ornldaac/1220/mstmip_driver_global_hd_climate_tair_2004_v1.nc4")
+print(ORNL)
 
+time = ncvar_get(ORNL, "time_bnds")
+lat = ncvar_get(ORNL, "lat_bnds")
+lon = ncvar_get(ORNL, "lon_bnds")
 
+#Boston: lat:42.3601, lon:71.0589
+start_lat = which((lat[1,] >= 42) & (lat[1,] <= 42.5))[1]
+start_lon = which((lon[1,] >= -71.5) & (lon[1,] <= -71))[1]
+
+air_temp = ncvar_get(ORNL,"tair", start = c(start_lon, start_lat, 1), count = c(1,1,-1))
+
+start_date = as.Date("1700-01-01")
+time_julian = start_date + time[1,]
+plot(time_julian, air_temp, type = 'l', main = "2014 Boston Air Temperature", xlab = "date", ylab = "Air Temperature (K)")
+
+```
+
+SOAP
+----
+
+In addition to data that is directly downloadable, and that which is scraped, there are a number of places on the web where data is available though interactive webservices. One standard protocol for such data sharing is the Simple Object Access Protocol (SOAP). In this example we will be using SOAP to access the NASA MODIS server, and rather than using the generic SOAP library we'll use a pre-existing R package called MODISTools, as a demonstration of one of the many dataset-specific R packages.  
+
+Next, we'll query the MODIS server to see what data products are available and what variables (bands) are available within one of those data products. More details about each data product (its definition, calculation, units, and missing data string) is available at https://lpdaac.usgs.gov/products/modis_products_table
+
+```{r}
+GetProducts()
+GetBands(Product="MOD13Q1")
+```
+
+Next, lets grab the data for a specific band (EVI) within a specific product (MOD13Q1). We'll focus on the location of the WLEF flux tower and look at the same year as we did with the flux data (2012). The argument Size defines the dimensions of the box grabbed in terms of distance (in kilometers) outward from the center. Note that in practice we would also want to query the QAQC data for this variable, `250m_16_days_VI_Quality`, as well and use it to screen the data.
+
+```{r}
+MODISSubsets(data.frame(lat=46.0827,long=-89.9792,start.date=2012,end.date=2012),
+  Product="MOD13Q1",Bands="250m_16_days_EVI",Size=c(1,1),StartDate=TRUE)
+```
+
+This function doesn't load the data directly into R, but instead saves it to your computer, so next we need to load the data.
+
+```{r}
+MODIS = read.csv(list.files(pattern=".asc")[1],header=FALSE,as.is=TRUE,na.string="-3000")
+```
+
+The data is arranged with the rows being the dates, the first 10 columns being the metadata, and the remaining columns being the observations. Here we extracted a 250m data products and looked +/ 1km in both directions, which gives us a 9x9 area and thus 81 data rows (and 86 rows total). For this example lets average over the spatial data and just generate a time-series of EVI. Also, lets extract the year (%Y) and day of year (%j) from column 3 and convert these to observation dates.
+
+```{r}
+EVI = apply(MODIS[,11:ncol(MODIS)],1,mean,na.rm=TRUE)*0.0001
+time = as.Date(substr(MODIS[,10],1,7),format="%Y%j")
+```
+
+**Question 5:** Plot EVI versus time and compare to the CO2 flux observations.
 
 
 
