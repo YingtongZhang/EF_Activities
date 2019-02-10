@@ -35,6 +35,7 @@ library("MODISTools")
 
 Note: The MODISTools library is no longer on CRAN, but can be downloaded manually from the ORNL DAAC here: https://modis.ornl.gov/data/modis_webservice.html
 
+<<<<<<< HEAD
 
 
 **Question 1:**
@@ -148,3 +149,16 @@ time = as.Date(substr(MODIS[,10],1,7),format="%Y%j")
 
 
 
+=======
+Pulling data directly off the web
+---------------------------------
+
+In the previous exercises we loaded data into R using functions like read.csv. However, it is also possible to read data into R directly off the web by passing a web address to the file name. For smaller files that are quick to load this approach can ensure that the script is always operating with the most up-to-date version of a data file. 
+
+```{r}
+gflu = read.csv("http://www.google.org/flutrends/about/data/flu/us/data.txt",skip=11)
+time = as.Date(gflu$Date)
+plot(time,gflu$Boston..MA,type='l')
+```
+
+>>>>>>> add rmd for the activity 3
