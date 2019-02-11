@@ -33,9 +33,6 @@ get.pkg("devtools")
 library("MODISTools")
 ```
 
-Note: The MODISTools library is no longer on CRAN, but can be downloaded manually from the ORNL DAAC here: https://modis.ornl.gov/data/modis_webservice.html
-
-<<<<<<< HEAD
 
 
 **Question 1:**
@@ -105,60 +102,111 @@ start_date = as.Date("1700-01-01")
 time_julian = start_date + time[1,]
 plot(time_julian, air_temp, type = 'l', main = "2014 Boston Air Temperature", xlab = "date", ylab = "Air Temperature (K)")
 
+nc_close(ORNL)
+
 ```
 
-SOAP
-----
 
-In addition to data that is directly downloadable, and that which is scraped, there are a number of places on the web where data is available though interactive webservices. One standard protocol for such data sharing is the Simple Object Access Protocol (SOAP). In this example we will be using SOAP to access the NASA MODIS server, and rather than using the generic SOAP library we'll use a pre-existing R package called MODISTools, as a demonstration of one of the many dataset-specific R packages.  
-
-Next, we'll query the MODIS server to see what data products are available and what variables (bands) are available within one of those data products. More details about each data product (its definition, calculation, units, and missing data string) is available at https://lpdaac.usgs.gov/products/modis_products_table
-
-```{r}
-GetProducts()
-GetBands(Product="MOD13Q1")
-```
-
-Next, lets grab the data for a specific band (EVI) within a specific product (MOD13Q1). We'll focus on the location of the WLEF flux tower and look at the same year as we did with the flux data (2012). The argument Size defines the dimensions of the box grabbed in terms of distance (in kilometers) outward from the center. Note that in practice we would also want to query the QAQC data for this variable, `250m_16_days_VI_Quality`, as well and use it to screen the data.
-
-```{r}
-MODISSubsets(data.frame(lat=46.0827,long=-89.9792,start.date=2012,end.date=2012),
-  Product="MOD13Q1",Bands="250m_16_days_EVI",Size=c(1,1),StartDate=TRUE)
-```
-
-This function doesn't load the data directly into R, but instead saves it to your computer, so next we need to load the data.
-
-```{r}
-MODIS = read.csv(list.files(pattern=".asc")[1],header=FALSE,as.is=TRUE,na.string="-3000")
-```
-
-The data is arranged with the rows being the dates, the first 10 columns being the metadata, and the remaining columns being the observations. Here we extracted a 250m data products and looked +/ 1km in both directions, which gives us a 9x9 area and thus 81 data rows (and 86 rows total). For this example lets average over the spatial data and just generate a time-series of EVI. Also, lets extract the year (%Y) and day of year (%j) from column 3 and convert these to observation dates.
-
-```{r}
-EVI = apply(MODIS[,11:ncol(MODIS)],1,mean,na.rm=TRUE)*0.0001
-time = as.Date(substr(MODIS[,10],1,7),format="%Y%j")
-```
 
 **Question 5:** Plot EVI versus time and compare to the CO2 flux observations.
 
-
-
-
-
-
-
-
-
-=======
-Pulling data directly off the web
----------------------------------
-
-In the previous exercises we loaded data into R using functions like read.csv. However, it is also possible to read data into R directly off the web by passing a web address to the file name. For smaller files that are quick to load this approach can ensure that the script is always operating with the most up-to-date version of a data file. 
-
 ```{r}
-gflu = read.csv("http://www.google.org/flutrends/about/data/flu/us/data.txt",skip=11)
-time = as.Date(gflu$Date)
-plot(time,gflu$Boston..MA,type='l')
+# EVI data
+MODISTools::mt_products()
+MODISTools::mt_bands(product="MOD13Q1")
+
+WC_file = "MODIS.WillowCreek.RData"
+if(file.exists(WC_file)){
+  load(WC_file)
+} else {
+  subset <- MODISTools::mt_subset(product = "MOD13Q1",
+                                band = "250m_16_days_EVI",
+                                lat=46.0827,
+                                lon=-89.9792,
+                                start="2012-01-01",
+                                end="2012-12-31",
+                                km_lr = 1,
+                                km_ab = 1,
+                                site_name = "WillowCreek")
+  save(subset,file=WC_file)
+}
+subset$header
+head(subset$data)
+
+
+# CO2 flux
+wlef = nc_open("US-PFa-WLEF-TallTowerClean-2012-L0-vFeb2013.nc")
+
+height = ncvar_get(wlef,"M_lvl")  
+FoY = ncvar_get(wlef,"FoY")  
+start = which((FoY >= 2012) & (FoY < 2013))[1]
+NEE = ncvar_get(wlef,"NEE_co2", start = c(1, start) , count =c(1, -1))    ## NEE data
+
+doy = ncvar_get(wlef,"time")
+start_date = as.Date("2011-12-31")
+time_julian = start_date + doy
+
+## average EVI spatially & use 'scale' to set units
+EVI = tapply(subset$data$data, subset$data$calendar_date, mean,na.rm=TRUE) * as.numeric(subset$header$scale)
+time = as.Date(names(EVI))
+
+# plot
+par(mar = c(6, 4, 4, 4) + 1.2) 
+plot(time, EVI, pch=16, axes=FALSE, ylim=c(0,1), xlab="", ylab="", type="l",col="black")
+axis(2, ylim=c(0,1),col="black",las=1)  
+mtext("EVI",side=2,line=2.5)
+box()
+
+par(new = TRUE)
+
+plot(time_julian, filter(NEE,rep(1/24,24)), pch=15,  xlab="", ylab="", ylim=c(-6,4), axes=FALSE, type="l", col="red")
+mtext("CO2 Flux observtions",side=4,col="red",line=4) 
+axis(4, c(-6, -4, -2, 0, 2, 4), col="red",col.axis="red",las=1)
+
+## Draw the time axis
+axis(1, time, format(time, "%b %d"), cex.axis = .7)
+mtext("Date",side=1,col="black",line=2.5)  
+## Add Legend
+legend("topleft",legend=c("EVI","CO2 Flux"),
+  text.col=c("black","red"), lty = c(1,1),col=c("black","red"))
+
+nc_close(wlef)
 ```
 
->>>>>>> add rmd for the activity 3
+
+
+**Question #6:**
+
+Imagine you are working with the full FIA database and want to ensure that the data you are using is always up to date. However, the total size of the database is large, the USFS server is slow, and you don't want to completely delete and reinstall the database every day when only a small percentage of the data changes in any update. 
+
+* Write out the pseudocode/outline for how to keep the files up to date
+* Write out what the cron table would look like to schedule this job (assume the update only needs to be done weekly)
+
+
+```
+First, a batch file is needed to excute the grab the data from the FIA database
+
+The batch file could like:
+#!/bin/sh
+#/usr/ytzhang/update_FIA_monthly.sh: monthly maintenance script
+#make directory for the downloading updated files, and make sure the files would not be rewrite
+mkdir -p /path/to
+usr/bin/wget http://domain.com/file.tar.gz -O /path/to/file_$(date +%Y%m%d_%H%M%S).tar.gz
+
+
+Sencond, using crontab -e and running the command like: 
+MAILTO=zhangyt@bu.edu
+update time /usr/ytzhang/update_FIA_monthly.sh
+
+
+The scheduled job runs once a week at 12:00 am on Sunday and the cron table would be like: 
+```
+```
+0 0 * * 0 /usr/ytzhang/update_FIA_monthly.sh
+```
+
+
+
+
+
+
