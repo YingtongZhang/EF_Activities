@@ -172,7 +172,9 @@ legend("topleft",legend=c("EVI","CO2 Flux"),
 
 nc_close(wlef)
 ```
-
+```
+The figure shows that the carbon flux went to negative during June and July, but corbon sink during early spring and Autumn, which has the opposite trend along time series with EVI value. The probably explaination of the trend might because that the evapotranspiration increases in summer and the CO2 is more likely to be absorbed by trees in June and July, causing higher EVI and lower flux.
+```
 
 
 **Question #6:**

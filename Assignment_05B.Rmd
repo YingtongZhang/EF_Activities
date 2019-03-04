@@ -1,0 +1,272 @@
+---
+title: "Assginment_05B - Bayesian Regression"
+author: "Yingtong Zhang"
+date: "2/27/2019"
+output: html_document
+---
+
+```{r,echo=FALSE}
+## Settings
+library(rjags)
+library(coda)
+```
+### Task 1
+* Evaluate the MCMC chain for convergence. Include relevant diagnostics and plots. Determine and remove burnin e.g. ```var.burn <- window(var.out,start=burnin)```
+* Report parameter summary table and plot marginal distributions
+* Describe and explain the parameter covariances that you observe in the pairs plot and parameter correlation matrix.
+* Compare the summary statistics for the Bayesian regression model to those from the classical regression:  summary(lm( y ~ x1 )).  This should include a comparison of the means and uncertainties of **all 3 model parameters**
+* Compare the fit parameters to the “true” parameters we used to generate the pseudo-data.  How well does the statistical analysis recover the true model?
+
+
+```{r}
+### Part 1: simulate data from a known model
+n <- 100  			## define the sample size
+b0 <- 10				## define the intercept
+b1 <- 2					## define the slope
+beta <- matrix(c(b0,b1),2,1)		## put “true” regression parameters in a matrix
+sigma <- 4				## define the standard deviation
+
+
+## simulate the linear regression model
+x1 <- runif(n,0,20)
+x <- cbind(rep(1,n),x1)
+y <- rnorm(n,x%*%beta,sigma)
+
+plot(x1,y)
+abline(b0,b1,col=2,lwd=3)
+
+data <- list(x = x1, y = y, n = n)
+```
+
+
+```{r}
+## specify model
+univariate_regression <- "
+model{
+
+  beta ~ dmnorm(b0,Vb)  	## multivariate Normal prior on vector of regression params
+  prec ~ dgamma(s1,s2)    ## prior precision
+
+  for(i in 1:n){
+	  mu[i] <- beta[1] + beta[2]*x[i]   	## process model
+	  y[i]  ~ dnorm(mu[i],prec)		        ## data model
+  }
+}
+"
+
+## specify priors
+data$b0 <- as.vector(c(0,0))      ## regression beta means
+data$Vb <- solve(diag(10000,2))   ## regression beta precisions
+# solve: b is taken to be an identity matrix and solve will return the inverse of a.
+data$s1 <- 0.1                    ## error prior n/2
+data$s2 <- 0.1                    ## error prior SS/2
+
+
+## initial conditions
+nchain = 3
+inits <- list()
+for(i in 1:nchain){
+ inits[[i]] <- list(beta = rnorm(2,0,5), prec = runif(1,1/100,1/20))
+}
+```
+
+
+```{r}
+# MCMC loop
+j.model <- jags.model(file = textConnection(univariate_regression),
+                             data = data,
+                             inits = inits,
+                             n.chains = nchain)
+
+# sample from the posterior
+var.out <- coda.samples (model = j.model,
+                            variable.names = c("beta","prec"),
+                                n.iter = 2000)
+```
+
+
+```{r}
+# Evaluate the MCMC chain for convergence. Include relevant diagnostics and plots.
+## remember to assess convergence and remove burn-in before doing other diagnostics
+gelman.diag(var.out)
+GBR <- gelman.plot(var.out)
+
+```
+
+```{r}
+# Determine and remove burnin
+burnin <- GBR$last.iter[max(apply(GBR$shrink[,,2] > 1.05,2,function(x){
+  y = tail(which(x),1)+1;
+  if(length(y)==0) y=1;
+  return(y)}
+))]
+burnin
+
+var.burn <- window(var.out,start=burnin)
+
+gelman.diag(var.burn)
+acfplot(var.burn)
+effectiveSize(var.burn)
+
+cumuplot(var.burn,probs=c(0.025,0.25,0.5,0.75,0.975))
+
+```
+```{r}
+#* Report parameter summary table and plot marginal distributions
+summary(var.out)
+
+plot(var.out)
+```
+
+
+```{r}
+## convert to matrix
+var.mat <- as.matrix(var.out)
+
+## Pairwise scatter plots & correlation
+pairs(var.mat)	## pairs plot to evaluate parameter correlation
+cor(var.mat)    ## correlation matrix among model parameters
+```
+
+* Describe and explain the parameter covariances that you observe in the pairs plot and parameter correlation matrix.
+The pair-wise result shows that beta1 and beta2 are highly correlated but neither correlate to precision, visulaizing the data of the correlation matrix. The two parameters beta1 and beta2 are correlated because they are derived from the linear regression model as the prior value.
+
+```{r}
+#Compare the summary statistics for the Bayesian regression model to those from the classical regression
+model_lm <- lm(y ~ x1)
+summary(model_lm)
+```
+From the summary table of two models, the values  are pretty much the same. The model with the non-informative prior has the values beta[1] = 9.96016; beta[2] = 1.96207; SE[1] = 0.81579; SE[2] = 0.06819. The Bayes results on the other hand are beta[1] = 9.97120; beta[2] = 1.96130; SE[1] = 0.835722; SE[2] = 0.069159.
+
+The fit parameters are pretty close to the "true" paramerters used to generate the pseudo-data but not exactly equal to, but it does quite good to recover the true model.
+
+
+
+
+# Regression Credible Intervals
+
+###  Task 2
+
+* Show the JAGS and R code used.
+* Include relevant convergence diagnostics and plots. 
+* Report parameter summary table. 
+* Plot marginal and pairwise joint distributions. Indicate 'true' parameters on the plots
+* Compare the fit parameters to the “true” parameters we used to generate the pseudo-data.  How well does the statistical analysis recover the true model?
+
+
+
+```{r}
+### Part 1: simulate data from a known model
+n <- 250  			## define the sample size
+b0 <- 10				## define the intercept
+b1 <- 2					## define slope1
+b2 <- -4        ## define slope2
+b3 <- 0.5       ## define interaction
+beta <- matrix(c(b0,b1,b2,b3),4,1)		## put “true” regression parameters in a matrix
+sigma <- 4				## define the standard deviation
+x1 <- runif(n,0,20)
+x2 <- runif(n,0,15)
+x <- cbind(rep(1,n),x1,x2,x1*x2)
+y <- rnorm(n,x%*%beta,sigma)
+plot(x1,y)
+plot(x2,y)
+```
+
+Extend your univariate regression model to a multivariate regression.
+
+```{r}
+## organize data to a list
+data <- list(x = cbind(x1,x2,x1*x2), y = y, n = n)
+
+## specify model
+multivariate_regression <- "
+model{
+
+  beta ~ dmnorm(b0,Vb)  	## multivariate Normal prior on vector of regression params
+  prec ~ dgamma(s1,s2)    ## prior precision
+
+  for(i in 1:n){
+	  mu[i] <- beta[1] + beta[2]*x[i,1] + beta[3]*x[i,2] +  beta[4]*x[i,3] 	## process model
+	  y[i]  ~ dnorm(mu[i],prec)		        ## data model
+  }
+}
+"
+
+## specify priors
+data$b0 <- as.vector(c(0,0,0,0))      ## regression beta means
+data$Vb <- solve(diag(10000,4))   ## regression beta precisions
+# solve: b is taken to be an identity matrix and solve will return the inverse of a.
+data$s1 <- 0.1                    ## error prior n/2
+data$s2 <- 0.1                    ## error prior SS/2
+
+
+## initial conditions
+nchain = 3
+inits <- list()
+for(i in 1:nchain){
+ inits[[i]] <- list(beta = rnorm(4,0,5), prec = runif(1,1/100,1/20))
+}
+
+# MCMC loop
+j.model <- jags.model(file = textConnection(multivariate_regression),
+                             data = data,
+                             inits = inits,
+                             n.chains = nchain)
+```
+
+```{r}
+# sample from the posterior
+var.out <- coda.samples (model = j.model,
+                         variable.names = c("beta","prec"),
+                         n.iter = 2000)
+```
+
+
+```{r}
+# Evaluation
+gelman.diag(var.out)
+GBR <- gelman.plot(var.out)
+
+```
+
+```{r}
+# Determine and remove burnin
+burnin <- GBR$last.iter[max(apply(GBR$shrink[,,2] > 1.05,2,function(x){
+  y = tail(which(x),1)+1;
+  if(length(y)==0) y=1;
+  return(y)}
+))]
+burnin
+
+var.burn <- window(var.out,start=burnin)
+
+gelman.diag(var.burn)
+acfplot(var.burn)
+effectiveSize(var.burn)
+
+cumuplot(var.burn,probs=c(0.025,0.25,0.5,0.75,0.975))
+
+```
+
+```{r}
+#* Report parameter summary table and plot marginal distributions
+summary(var.out)
+
+plot(var.out)
+```
+
+
+```{r}
+## convert to matrix
+var.mat <- as.matrix(var.out)
+
+## Pairwise scatter plots & correlation
+pairs(var.mat)	## pairs plot to evaluate parameter correlation
+cor(var.mat)    ## correlation matrix among model parameters
+```
+Beta1 and beta2, beta1 and beta3, beta2 and beta4, beta3 and beta4 show the negtive correlation, while beta1 and beta4, beta2 and beta3 show positive correlation.
+
+
+The fit parameters are pretty close to the "true" paramerters (b0=10; b1=2; b2=-4; b3=0.5) used to generate the pseudo-data, with the mean of 10.27660, 2.03952, -4.08525, and 0.49600 respectively, which indicate that the statistical analysis recovers pretty good of true model.
+
+
