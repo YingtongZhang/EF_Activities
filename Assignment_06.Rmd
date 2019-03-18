@@ -1,0 +1,380 @@
+---
+title: "Assginment_06"
+Author: "Yingtong Zhang"
+---
+
+Assignment:
+-----------
+
+To look at how observation frequency affects data assimilation, convert 3 out of every 4 observations to NA (i.e. treat the data as approximately monthly) and refit the model. 
+
+* Generate a time-series plot for the CI of x that includes the observations (as above). Use a different color and symbol to differentiate observations that were included in the model versus those that were converted to NA's.
+- Please take a look at the following script and figure 2.
+
+* Compare the CI between the two runs.
+- The CI in the 2nd run (with reduced frequent observations) is quite large than with more observations (fig.1 and fig.2).
+
+
+```{r}
+library(rjags)
+library(daymetr)
+```
+
+
+```{r}
+gflu = read.csv("http://www.google.org/flutrends/about/data/flu/us/data.txt",skip=11)
+time = as.Date(gflu$Date)
+y = gflu$Massachusetts
+
+# convert 3 out of every 4 observations to NA
+idx = seq(1,length(y),4)
+y.keep = y.rmv = y
+y.keep[-idx] <- NA
+y.rmv[idx] <- NA
+
+#plot(time, y.keep ,type='l', ylab="Flu Index", lwd=2, log='y')
+```
+
+```{r}
+# set up the model 
+RandomWalk = "
+model{
+  
+  #### Data Model
+  for(t in 1:n){
+    y[t] ~ dnorm(x[t],tau_obs)
+  }
+  
+  #### Process Model
+  for(t in 2:n){
+    x[t]~dnorm(x[t-1],tau_add)
+  }
+  
+  #### Priors
+  x[1] ~ dnorm(x_ic,tau_ic)
+  tau_obs ~ dgamma(a_obs,r_obs)
+  tau_add ~ dgamma(a_add,r_add)
+}
+"
+
+## 1st (ori) run
+data <- list(y=log(y),n=length(y),x_ic=log(1000),tau_ic=100,a_obs=1,r_obs=1,a_add=1,r_add=1)
+
+# initialization
+nchain = 3
+init <- list()
+for(i in 1:nchain){
+  y.samp = sample(y,length(y),replace=TRUE)
+  init[[i]] <- list(tau_add=1/var(diff(log(y.samp))),tau_obs=5/var(log(y.samp)))
+}
+
+j.model   <- jags.model (file = textConnection(RandomWalk),
+                             data = data,
+                             inits = init,
+                             n.chains = 3)
+
+jags.out   <- coda.samples (model = j.model,
+                            variable.names = c("x","tau_add","tau_obs"),
+                                n.iter = 10000)
+```
+
+```{r}
+time.rng = c(1,length(time)) ## adjust to zoom in and out
+out <- as.matrix(jags.out)
+x.cols <- grep("^x",colnames(out)) ## grab all columns that start with the letter x
+ci.1st <- apply(exp(out[,x.cols]),2,quantile,c(0.025,0.5,0.975)) ## model was fit on log scale
+
+plot(time,ci.1st[2,],type='n',ylim=range(y,na.rm=TRUE),ylab="Flu Index",log='y',xlim=time[time.rng], main='Fig.1. Model fitted by weekly observations')
+## adjust x-axis label to be monthly if zoomed
+if(diff(time.rng) < 100){ 
+  axis.Date(1, at=seq(time[time.rng[1]],time[time.rng[2]],by='month'), format = "%Y-%m")
+}
+ecoforecastR::ciEnvelope(time,ci.1st[1,],ci.1st[3,],col=ecoforecastR::col.alpha("lightBlue",0.75))
+points(time,y,pch="+",cex=0.5)
+
+hist(1/sqrt(out[,1]),main=colnames(out)[1])
+hist(1/sqrt(out[,2]),main=colnames(out)[2])
+```
+
+
+```{r}
+## 2nd (rmv) run
+data.keep <- list(y=log(y.keep),n=length(y.keep),x_ic=log(1000),tau_ic=100,a_obs=1,r_obs=1,a_add=1,r_add=1)
+
+# initialization
+nchain = 3
+init <- list()
+for(i in 1:nchain){
+  y.samp = sample(y.keep, length(y.keep), replace=TRUE)
+  init[[i]] <- list(tau_add=1/var(diff(log(y.samp))),tau_obs=5/var(log(y.samp)))
+}
+
+# run the model
+j.model <- jags.model (file = textConnection(RandomWalk),
+                             data = data.keep,
+                             inits = init,
+                             n.chains = 3)
+
+## burn-in
+# jags.out.keep <- coda.samples (model = j.model,
+#                             variable.names = c("tau_add","tau_obs"),
+#                                 n.iter = 1000)
+# plot(jags.out.keep)
+
+jags.out.keep <- coda.samples (model = j.model,
+                            variable.names = c("x","tau_add","tau_obs"),
+                                n.iter = 10000)
+
+```
+
+
+```{r}
+time.rng = c(1,length(time)) ## adjust to zoom in and out
+out <- as.matrix(jags.out.keep)
+x.cols <- grep("^x",colnames(out)) ## grab all columns that start with the letter x
+ci <- apply(exp(out[,x.cols]),2,quantile,c(0.025,0.5,0.975)) ## model was fit on log scale
+
+
+plot(time,ci[2,],type='n',ylim=range(y,na.rm=TRUE),ylab="Flu Index",log='y',xlim=time[time.rng], main='Fig.2. Model fitted by monthly observations')
+
+## adjust x-axis label to be monthly if zoomed
+if(diff(time.rng) < 100){ 
+  axis.Date(1, at=seq(time[time.rng[1]],time[time.rng[2]],by='month'), format = "%Y-%m")
+}
+ecoforecastR::ciEnvelope(time,ci[1,],ci[3,],col=ecoforecastR::col.alpha("lightBlue",0.75))
+points(time,y.keep,pch="+",cex=0.5)
+points(time,y.rmv,pch='*',col='red',cex=0.5)
+legend("topleft",lty=c(1,0,0),c('95% CI','data used to fit model','data not used to fit model'),col=c('lightBlue','black','red'),pch=c(0,'+','*'),lwd=2,cex=0.65)
+```
+
+* Generate a predicted (median) vs observed plot for the data points that were removed.
+- The figure 3 shows the relationship between predicted vs observed data points which been removed. The scatter plot indicates that the model predicted well when the flux index values are relatively lower, showing stronger linear relationship between the observed and predicted value. However, the index value are underestimated when the index getting higher.
+
+```{r}
+# Generate a predicted (median) vs observed plot for the data points that were removed.
+pred_med = ci[2,]
+pred_med[idx] <- NA
+plot(y.rmv, pred_med, ylab ="predicted", xlab = "observed", main="Fig.3. Predicted (median) vs observed (the removed data points)")
+abline(a=0, b=1)
+```
+
+
+```{r}
+fit1 =  lm(y ~ ci.1st[2,]) # weekly observations
+fit2 =  lm(y ~ ci[2,]) # monthly data
+summary(fit1)
+summary(fit2)
+```
+
+* Comment on the accuracy and precision of the state estimates.
+- The accuracy and precisions of remove-observation case is larger than the weekly case in terms of the histograms of tau_add and tau_obs. The linear regression results of the predicted vs observed data of two runs also give the magnitude of residuals and R2, having the identical results of indicating the better performance of the first run.
+
+```{r}
+hist(1/sqrt(out[,1]),main=colnames(out)[1])
+hist(1/sqrt(out[,2]),main=colnames(out)[2])
+```
+
+* How does the reduction in data volume affect the parameter estimates (taus)
+- It shows that the more frequent observations could improve the accuracy for random walk approach.
+
+```{r, fig.asp = 1.0}
+plot(out[,1],out[,2],pch=".",xlab=colnames(out)[1],ylab=colnames(out)[2])
+cor(out[,1:2])
+```
+
+
+
+
+Extra Credit (Part 1):
+----------------------
+
+Return to the original data and instead of removing 3/4 of the data remove the last 40 observations (convert to NA) and refit the model to make a forecast for this period
+
+* Generate a time-series plot for the CI of x that includes the observations (as above but zoom the plot on the last ~80 observations). Use a different color and symbol to differentiate observations that were included in the model versus those that were converted to NA's.
+* Comment on how well the random walk model performed (both accuracy and precision) and how it might be modified to improve both these criteria.
+
+
+```{r}
+# convert the last 40 observations to NA
+idx = 1:(length(y)-40)
+y.keep = y.rmv = y
+y.keep[-idx] <- NA
+y.rmv[idx] <- NA
+
+```
+
+
+```{r}
+## 3rd (rmv) run
+data.keep <- list(y=log(y.keep),n=length(y.keep),x_ic=log(1000),tau_ic=100,a_obs=1,r_obs=1,a_add=1,r_add=1)
+
+# initialization
+nchain = 3
+init <- list()
+for(i in 1:nchain){
+  y.samp = sample(y.keep, length(y.keep), replace=TRUE)
+  init[[i]] <- list(tau_add=1/var(diff(log(y.samp))),tau_obs=5/var(log(y.samp)))
+}
+
+# run the model
+j.model <- jags.model (file = textConnection(RandomWalk),
+                             data = data.keep,
+                             inits = init,
+                             n.chains = 3)
+
+## burn-in
+# jags.out.keep <- coda.samples (model = j.model,
+#                             variable.names = c("tau_add","tau_obs"),
+#                                 n.iter = 1000)
+# plot(jags.out.keep)
+
+jags.out.keep <- coda.samples (model = j.model,
+                            variable.names = c("x","tau_add","tau_obs"),
+                                n.iter = 10000)
+
+```
+
+
+```{r}
+time.rng = c(length(time)-80, length(time)) ## adjust to zoom in and out
+out <- as.matrix(jags.out.keep)
+x.cols <- grep("^x",colnames(out)) ## grab all columns that start with the letter x
+ci <- apply(exp(out[,x.cols]),2,quantile,c(0.025,0.5,0.975)) ## model was fit on log scale
+
+
+plot(time,ci[2,],type='n',ylim=range(y,na.rm=TRUE),ylab="Flu Index",log='y',xlim=time[time.rng], main='Fig.4. Model fitted with last 40 observations removed')
+
+## adjust x-axis label to be monthly if zoomed
+if(diff(time.rng) < 100){ 
+  axis.Date(1, at=seq(time[time.rng[1]],time[time.rng[2]],by='month'), format = "%Y-%m")
+}
+ecoforecastR::ciEnvelope(time,ci[1,],ci[3,],col=ecoforecastR::col.alpha("lightBlue",0.75))
+points(time,y.keep,pch="+",cex=0.5)
+points(time,y.rmv,pch='*',col='purple',cex=0.5)
+legend("topleft",lty=c(1,0,0),c('95% CI','data used to fit model','data not used to fit model'),col=c('lightBlue','black','purple'),pch=c(0,'+','*'),lwd=2,cex=0.65)
+```
+
+
+* Comment on the accuracy and precision of the state estimates.
+- The accuracy and precisions of remove-observation case is larger than the weekly case in terms of the histograms of tau_add and tau_obs. The linear regression results of the predicted vs observed data of two runs also give the magnitude of residuals and R2, having the identical results of indicating the better performance of the first run.
+
+```{r}
+layout(matrix(c(1,2,3,3),2,2,byrow=TRUE))
+hist(1/sqrt(out[,1]),main=colnames(out)[1], xlim = c(0.1,0.3), breaks = 20)
+hist(1/sqrt(out[,2]),main=colnames(out)[2], xlim = c(0,0.2), breaks = 40)
+plot(out[,1],out[,2],pch=".",xlab=colnames(out)[1],ylab=colnames(out)[2])
+```
+
+
+
+
+
+
+# Dynamic Linear Models
+Here we're going to use the Daymet product to get daily weather estimates, and then use daily minimum temperature (Tmin) as the covariate in our influenza model
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+gflu = read.csv("http://www.google.org/flutrends/about/data/flu/us/data.txt",skip=11)
+time = as.Date(gflu$Date)
+y = gflu$Massachusetts
+
+RandomWalk = "
+model{
+  
+  #### Data Model
+  for(t in 1:n){
+    y[t] ~ dnorm(x[t],tau_obs)
+  }
+  
+  #### Process Model
+  for(t in 2:n){
+    x[t]~dnorm(x[t-1],tau_add)
+  }
+  
+  #### Priors
+  x[1] ~ dnorm(x_ic,tau_ic)
+  tau_obs ~ dgamma(a_obs,r_obs)
+  tau_add ~ dgamma(a_add,r_add)
+}
+"
+
+data <- list(y=log(y),n=length(y),x_ic=log(1000),tau_ic=100,a_obs=1,r_obs=1,a_add=1,r_add=1)
+
+nchain = 3
+init <- list()
+for(i in 1:nchain){
+  y.samp = sample(y,length(y),replace=TRUE)
+  init[[i]] <- list(tau_add=1/var(diff(log(y.samp))),tau_obs=5/var(log(y.samp)))
+}
+
+j.model   <- jags.model (file = textConnection(RandomWalk),
+                             data = data,
+                             inits = init,
+                             n.chains = 3)
+
+jags.out   <- coda.samples (model = j.model,
+                            variable.names = c("x","tau_add","tau_obs"),
+                                n.iter = 10000)
+
+time.rng = c(1,length(time)) ## adjust to zoom in and out
+out <- as.matrix(jags.out)
+x.cols <- grep("^x",colnames(out)) ## grab all columns that start with the letter x
+ci <- apply(exp(out[,x.cols]),2,quantile,c(0.025,0.5,0.975)) ## model was fit on log scale
+```
+
+
+```{r}
+## grab weather data
+df <- daymetr::download_daymet(site = "Boston",
+                lat = 42.36,
+                lon = -71.06,
+                start = 2003,
+                end = 2016,
+                internal = TRUE)$data
+df$date <- as.Date(paste(df$year,df$yday,sep = "-"),"%Y-%j")
+data$Tmin = df$tmin..deg.c.[match(time,df$date)]
+
+## fit the model
+ef.out <- ecoforecastR::fit_dlm(model=list(obs="y",fixed="~ Tmin"),data)
+names(ef.out)
+```
+
+```{r, fig.asp = 1.0}
+## parameter diagnostics
+params <- window(ef.out$params,start=1000) ## remove burn-in
+plot(params)
+summary(params)
+cor(as.matrix(params))
+pairs(as.matrix(params))
+
+## confidence interval
+out <- as.matrix(ef.out$predict)
+ci <- apply(exp(out),2,quantile,c(0.025,0.5,0.975))
+plot(time,ci[2,],type='n',ylim=range(y,na.rm=TRUE),ylab="Flu Index",log='y',xlim=time[time.rng])
+## adjust x-axis label to be monthly if zoomed
+if(diff(time.rng) < 100){ 
+  axis.Date(1, at=seq(time[time.rng[1]],time[time.rng[2]],by='month'), format = "%Y-%m")
+}
+ecoforecastR::ciEnvelope(time,ci[1,],ci[3,],col=ecoforecastR::col.alpha("lightBlue",0.75))
+points(time,y,pch="+",cex=0.5)
+```
+
+```{r, echo=FALSE}
+strsplit(ef.out$model,"\n",fixed = TRUE)[[1]]
+```
+
+
+* Compare the process and observation error estimates and model CI between this fit and the original random walk model. How much has the residual variance been reduced by?
+-- The “Process Model” of this fit is very similar to the random walk, but the prior and data model are same of both procedures, except the addition of code for the means of the covariates. The model CI is way smaller and stable in this fit compared to orginal random walk.
+According to the first group of the histograms (weekly observation/1st run), tau_add and tau_obs in the original random walk model are around 0.21 and 0.13 respectively, while the fit with covariate has precision 0.1955 (1/sqrt(26.17582)) and 0.0656 (1/sqrt(232.273625)) for tau_add and tau_obs.
+
+* Because a state-space model returns X's that are close to the Y's, metrics such as R2 and RMSE aren't great metrics of model performance. Besides looking at the taus, how else could we judge which model is doing better (in a way that avoids/penalizes overfitting)?
+-- It can be done by cross-validation. First remove data points or taking samples from original dataset, and then refit the model, and last evaluates how well the model predicts the missing observation.
+
+* Explain and discuss the parameter estimates (betas) from the linear model (what do they mean both biologically and in terms of the predictability of the system) and their correlations.
+-- Since $\beta_0$ is the intercept, $\beta_1$ is the slope of the covariate effect, and $\beta_{IC}$ is the slope of the initial condition effect, the estimated median value of $\beta_1$ shows that the minimum temperature nearly has no impact for predicting the flux index, while the initial conditions/priors take effect on the system. $\beta_0$ and $\beta_{IC}$ have strongly negative correlation, while $\beta_0$ and $\beta_1$ correlated to each other negatively, but not very significant.
+
